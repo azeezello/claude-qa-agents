@@ -1,0 +1,89 @@
+# qa-config.yml — Python / FastAPI + Postgres
+#
+# A third profile, to show that the layer model is not tied to any one stack.
+#
+# Install: copy to `.claude/qa-config.yml` in the repo root.
+
+version: 1
+
+project:
+  name: my-api
+  repo_path: "."
+  base_branch: develop
+  output_language: en
+  artifacts_dir: .claude/qa
+
+stack:
+  label: "Python 3.12 · FastAPI · SQLAlchemy + Alembic · Postgres"
+
+  layers:
+    entrypoint:
+      globs:
+        - "app/api/**/*.py"
+        - "app/routers/**/*.py"
+      hint: >-
+        FastAPI routers. `@router.get("/path")` plus the router's `prefix=` in
+        the includer gives the full path. Note the `response_model` and any
+        `status_code=` — those are the observable contract. `Depends(...)` on
+        an auth dependency marks the endpoint as protected: always worth a
+        security scenario.
+
+    ui:
+      globs: []
+      hint: ""
+
+    logic:
+      globs:
+        - "app/services/**/*.py"
+        - "app/crud/**/*.py"
+      hint: >-
+        Service and CRUD layer. Each `raise HTTPException(...)` is a negative
+        scenario with a concrete status code to assert.
+
+    data_model:
+      globs:
+        - "app/models/**/*.py"
+        - "alembic/versions/**/*.py"
+      hint: >-
+        SQLAlchemy models give `__tablename__` and columns. Alembic revisions
+        give the migration: `op.create_table`, `op.add_column`,
+        `op.alter_column` — record nullability and default changes, they are
+        where existing rows break.
+
+    async:
+      globs:
+        - "app/tasks/**/*.py"
+        - "app/workers/**/*.py"
+      hint: "Celery tasks and background workers — flows with no request behind them."
+
+  tests:
+    globs:
+      - "tests/**/test_*.py"
+    hint: "pytest suite."
+
+  skip_globs:
+    - "**/__pycache__/**"
+    - "**/.venv/**"
+    - "**/*.lock"
+
+data:
+  # Queries run through a command-line client rather than an MCP server —
+  # set the connection in the usual PG* environment variables.
+  provider: cli
+  schema: public
+  identifier_fields:
+    - user_id
+    - order_id
+    - email
+  query_command: "psql -At -c \"{sql}\""
+
+logs:
+  # No log platform wired up — read the application log file directly.
+  provider: file
+  sources:
+    - "logs/app.log"
+  default_range_hours: 24
+
+exports:
+  github_checklist: true
+  jira_wiki: false

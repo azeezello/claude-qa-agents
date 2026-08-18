@@ -1,0 +1,14 @@
+# Generated QA artifacts — these belong to the project under test, not here
+.claude/qa/
+.claude/settings.local.json
+.claude/worktrees/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

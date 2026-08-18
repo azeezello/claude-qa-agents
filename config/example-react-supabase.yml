@@ -1,0 +1,118 @@
+# qa-config.yml — React SPA + Supabase
+#
+# Profile for a Vite-based React SPA whose backend is Supabase: Postgres with
+# row-level security, plus Deno edge functions and serverless API routes.
+#
+# This is the profile behind examples/venue-persistence/.
+#
+# Install: copy to `.claude/qa-config.yml` in the repo root.
+
+version: 1
+
+project:
+  name: readclub
+  repo_path: "."
+  base_branch: main
+  output_language: en
+  artifacts_dir: .claude/qa
+
+stack:
+  label: "React 19 + Vite SPA · Supabase Postgres · serverless + Deno edge functions"
+
+  layers:
+    entrypoint:
+      globs:
+        - "app/api/**/*.js"
+        - "supabase/functions/**/index.ts"
+      hint: >-
+        Two kinds of HTTP entrypoint. Files under `app/api/` are serverless
+        handlers — the route path is the file path (`app/api/invite.js` →
+        `/api/invite`), the method is whatever `req.method` is checked against.
+        `supabase/functions/<name>/index.ts` are Deno edge functions — the route
+        is `/functions/v1/<name>`. For both, record method + path and the status
+        codes returned; these become flow headers.
+
+    ui:
+      globs:
+        - "app/src/screens/**/*.jsx"
+        - "app/src/components/**/*.jsx"
+        - "app/src/App.jsx"
+      hint: >-
+        React screens and components. If navigation is state-based rather than
+        router-based, a "page" is a value of the screen state in App.jsx, not a
+        URL. A user action is a button or form handler; an observable outcome is
+        rendered text, a toast, a map pin, or a screen transition. Never
+        describe a scenario in terms of state variables or prop names.
+
+    logic:
+      globs:
+        - "app/src/services/**/*.js"
+        - "app/src/utils/**/*.js"
+      hint: >-
+        Every database query lives in `services/` — screens never query
+        directly. Each exported function is one observable operation. Note
+        `.eq()` / `.filter()` chains: they define which rows a user can see,
+        and each one is a candidate negative or security scenario. Files in
+        `utils/` hold derived rules (badges, thresholds, formatting) — a rich
+        source of boundary values.
+
+    data_model:
+      globs:
+        - "supabase/migrations/**/*.sql"
+      hint: >-
+        Postgres DDL. Beyond tables and columns, watch for `create policy` /
+        `alter policy` (row-level security) and `create function` /
+        `create trigger`. An RLS change always deserves a security scenario:
+        who can now read or write a row that they could not before, and who
+        just lost access.
+
+    async:
+      globs:
+        - "supabase/functions/send-push/**"
+        - "supabase/migrations/**/*webhook*.sql"
+      hint: "Push notifications and database webhooks — flows nobody clicks."
+
+  tests:
+    globs:
+      - "app/src/**/*.test.js"
+      - "app/src/**/*.test.jsx"
+      - "app/tests/e2e/**/*.spec.js"
+      - "app/cypress/**/*.cy.js"
+    hint: >-
+      Vitest unit tests sit next to the file they cover (`fooService.test.js`
+      covers `fooService.js`). Playwright specs in `app/tests/e2e/` and Cypress
+      specs in `app/cypress/e2e/` cover end-to-end flows. Match a scenario to a
+      test by the operation or user flow it exercises, not by filename.
+
+  skip_globs:
+    - "**/node_modules/**"
+    - "**/package-lock.json"
+    - "**/*.css"
+    - "**/*.snap"
+    - "app/public/**"
+    - "**/dist/**"
+
+data:
+  # Queries run through the Supabase MCP server's SQL tool.
+  provider: mcp
+  schema: public
+  identifier_fields:
+    - member_id
+    - meeting_id
+    - venue
+    - email
+  query_tool: execute_sql
+
+logs:
+  provider: mcp
+  search_tool: get_logs
+  sources:
+    - postgres
+    - edge-function
+    - auth
+    - api
+  default_range_hours: 24
+
+exports:
+  github_checklist: true
+  jira_wiki: false

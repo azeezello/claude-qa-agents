@@ -1,0 +1,157 @@
+# qa-config.yml — reference
+#
+# Copy this file to your project as `.claude/qa-config.yml` and edit it.
+# Every key is optional: agents auto-detect what they can and degrade gracefully
+# when something is missing. The more you fill in, the less the agents guess.
+
+version: 1
+
+project:
+  # Shown in generated artifact headers.
+  name: my-service
+
+  # Path to the repository whose code is under test, relative to the directory
+  # where the agents run.
+  #   "."          — agents live in the same repo as the code (most common)
+  #   "../backend" — agents live in a separate QA repo next to the service repo
+  repo_path: "."
+
+  # Branch that feature branches are diffed against. Was hardcoded before —
+  # set it to whatever your team merges into: main, master, develop, qa, ...
+  base_branch: main
+
+  # Language of every generated artifact (checklists, guides, verdicts).
+  # Any IETF tag works — "en", "ru", "tr", "de". Agents keep IDs, tags and
+  # code identifiers untranslated regardless of this setting.
+  output_language: en
+
+  # Root for generated files. Agents write:
+  #   {artifacts_dir}/checklists/  {artifacts_dir}/guides/  {artifacts_dir}/notes/
+  artifacts_dir: .claude/qa
+
+# ---------------------------------------------------------------------------
+# stack — how to read a diff in THIS codebase.
+#
+# This is what makes the agents stack-agnostic. Each layer is a set of globs
+# plus a one-line hint telling the agent how to interpret files in that layer.
+# Layers are read in the order below; the order is also the reading priority
+# when a diff is too large to read in full.
+# ---------------------------------------------------------------------------
+stack:
+  label: "Describe the stack in one line — shown in artifact headers"
+
+  layers:
+    # Where externally-triggerable behaviour enters the system.
+    entrypoint:
+      globs:
+        - "src/**/*Controller.java"
+      hint: >-
+        REST controllers. Record HTTP method + full path for every changed
+        endpoint; these become flow headers in the checklist.
+
+    # User-facing surface, if the repo contains one. Omit for backend-only repos.
+    ui:
+      globs: []
+      hint: ""
+
+    # Business rules: what triggers behaviour, what the side effects are.
+    logic:
+      globs:
+        - "src/**/*Service.java"
+        - "src/**/*Handler.java"
+      hint: >-
+        Each conditional branch that changes observable behaviour is a
+        candidate scenario.
+
+    # Entities, schema, persisted shape.
+    data_model:
+      globs:
+        - "src/**/*Entity.java"
+        - "src/main/resources/db/changelog/**/*.xml"
+      hint: >-
+        Tables and columns touched by the change; used to build the DB section
+        of the guide.
+
+    # Asynchronous / scheduled / external triggers. Optional.
+    async:
+      globs:
+        - "src/**/*Consumer.java"
+        - "src/**/*Listener.java"
+      hint: "Queue consumers and scheduled jobs — a flow nobody clicks."
+
+  # Existing automated coverage. Scenarios matching a test found here are
+  # tagged [AUTO]; everything else is [MANUAL].
+  tests:
+    globs:
+      - "src/test/**/*Test.java"
+    hint: "JUnit tests."
+
+  # Never read these, even when they appear in the diff.
+  skip_globs:
+    - "**/node_modules/**"
+    - "**/*.lock"
+    - "**/*.snap"
+    - "**/*.min.*"
+
+# ---------------------------------------------------------------------------
+# data — how flow-verifier inspects persisted state.
+#
+# Declare a capability, not a product. Any MCP server that can run a query
+# works; name its query tool and flow-verifier resolves the real prefixed name
+# at runtime. Set provider: none to skip all DB assertions.
+# ---------------------------------------------------------------------------
+data:
+  # mcp  — query through an MCP tool
+  # cli  — query through a command-line client, run via Bash
+  # none — no database evidence available
+  provider: none
+
+  # Schema/owner prefix used in generated SQL. Leave empty for none.
+  schema: ""
+
+  # Fields that identify one entity end-to-end. flow-verifier accepts any of
+  # these as its `id=` argument and classifies the value against this list.
+  identifier_fields: []
+
+  # provider: mcp — logical name of the tool that runs a query.
+  query_tool: ""
+
+  # provider: cli — command template; {sql} is substituted.
+  query_command: ""
+
+# ---------------------------------------------------------------------------
+# logs — how flow-verifier finds runtime evidence.
+# Set provider: none to verify against the database only.
+# ---------------------------------------------------------------------------
+logs:
+  # mcp  — search through an MCP tool
+  # file — read log files listed in sources
+  # none — no log evidence available
+  provider: none
+
+  # provider: mcp — logical name of the tool that searches logs.
+  search_tool: ""
+
+  # Log sources to search, in priority order. Names for an MCP provider,
+  # file paths for the file provider.
+  sources: []
+
+  # Only needed when the log tool addresses sources by an opaque id rather than
+  # by the name used in `sources`.
+  source_ids: []
+  #  - name: backend-qa
+  #    id: "<id from your log platform>"
+
+  # Default lookback for log searches, in hours.
+  default_range_hours: 24
+
+# ---------------------------------------------------------------------------
+# exports — extra renderings of the checklist, in addition to the Markdown file
+# (the Markdown file is always written).
+# ---------------------------------------------------------------------------
+exports:
+  # Print a `- [ ]` checkbox version, ready to paste into a GitHub issue or PR.
+  github_checklist: true
+
+  # Print a Jira wiki-markup version, ready to paste in Jira's Text mode.
+  jira_wiki: false

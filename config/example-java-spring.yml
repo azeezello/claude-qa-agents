@@ -1,0 +1,116 @@
+# qa-config.yml — Java / Spring Boot backend, separate QA repo
+#
+# Two things this profile demonstrates that the others do not:
+#   1. `repo_path` pointing at a sibling checkout — the agents live in a QA
+#      automation repo, the code under test is next door.
+#   2. `base_branch` that is not `main` — plenty of teams merge into a
+#      dedicated integration branch.
+#
+# Database and log access are declared as capabilities (`mcp`, naming the tool)
+# rather than as products, so the same profile works whichever SQL database and
+# log platform you point it at.
+#
+# Install: copy to `.claude/qa-config.yml` in the QA repo root.
+
+version: 1
+
+project:
+  name: my-service
+  repo_path: "../my-service"
+  base_branch: develop
+  output_language: en
+  artifacts_dir: .claude/qa
+
+stack:
+  label: "Java 21 · Spring Boot · SQL database · message queue"
+
+  layers:
+    entrypoint:
+      globs:
+        - "**/*Controller.java"
+      hint: >-
+        Spring REST controllers. Record `{HTTP_METHOD} {full path}` for every
+        new or changed endpoint — the class-level `@RequestMapping` plus the
+        method-level mapping. Capture the declared status codes and the request
+        body type. An endpoint annotated as hidden from the generated API docs
+        is still testable; note that it is undocumented.
+
+    ui:
+      globs: []
+      hint: ""
+
+    logic:
+      globs:
+        - "**/*Service.java"
+        - "**/*Handler.java"
+        - "**/*Processor.java"
+      hint: >-
+        Business rules. Each conditional branch that changes an outcome
+        visible from outside the service is a candidate scenario. Log
+        statements at decision points are the evidence flow-verifier will
+        later look for.
+
+    data_model:
+      globs:
+        - "**/*Entity.java"
+        - "**/*Repository.java"
+        - "**/db/migration/**"
+        - "**/db/changelog/**"
+      hint: >-
+        Persistence annotations give table and column names. Migration files
+        give schema changes: new tables, added columns, renames, nullability
+        and default changes. On a rename record both names — existing rows
+        still carry the old one.
+
+    async:
+      globs:
+        - "**/*Consumer.java"
+        - "**/*Listener.java"
+        - "**/*Scheduler.java"
+        - "**/*Job.java"
+      hint: >-
+        Queue consumers and scheduled jobs. Record the trigger — topic name or
+        schedule expression — and the observable side effect. These are flows
+        with no user and no UI, and they are the ones manual testing forgets.
+
+  tests:
+    globs:
+      - "src/test/java/**/*Test.java"
+      - "src/test/java/**/*IT.java"
+    hint: "JUnit unit and integration tests in the QA automation repo."
+
+  skip_globs:
+    - "**/target/**"
+    - "**/build/**"
+    - "**/*.lock"
+    - "**/helm/**"
+
+data:
+  # mcp | cli | none — a capability, not a product.
+  provider: mcp
+  schema: MYSCHEMA
+  identifier_fields:
+    - accountId
+    - customerId
+    - orderId
+  # Logical name of the MCP tool that runs a query — look it up in your own MCP
+  # server's tool list. flow-verifier resolves the real prefixed name via
+  # ToolSearch at runtime, so the bare name is enough here.
+  query_tool: "<your SQL MCP tool, e.g. run_query>"
+
+logs:
+  # mcp | file | none
+  provider: mcp
+  search_tool: "<your log MCP tool, e.g. query_logs>"
+  # Human-readable log sources to search, in priority order.
+  sources:
+    - backend-qa
+  # Only needed when the log tool addresses sources by an opaque id.
+  source_ids: []
+  #  - name: backend-qa
+  #    id: "<id from your log platform>"
+  default_range_hours: 24
+
+exports:
+  github_checklist: false
+  jira_wiki: true
